@@ -200,7 +200,7 @@ export default function Home() {
       {/* Footer Kecil dengan Link Admin Pop-out */}
       <div className="relative z-10 mt-8 text-center flex-shrink-0 drop-shadow-md">
         <p className="text-xs text-gray-500 font-semibold italic">
-          &copy; {new Date().getFullYear()} Database Peta Konsultan
+          &copy; {new Date().getFullYear()} Database Peta Irfan
         </p>
         
         <div className="mt-2 h-5">
