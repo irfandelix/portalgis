@@ -7,6 +7,7 @@ export default function AdminDashboard() {
   const [folders, setFolders] = useState<any[]>([]);
   const [newFolderName, setNewFolderName] = useState('');
   const [loading, setLoading] = useState(false);
+  const [isUploading, setIsUploading] = useState(false); // State baru untuk efek loading upload
   const router = useRouter();
 
   // 1. Ambil daftar folder dari Drive
@@ -72,40 +73,68 @@ export default function AdminDashboard() {
     }
   };
 
-  // 5. Fungsi Multi-Upload File
+  // 5. Fungsi Multi-Upload File (DIRECT UPLOAD KE DRIVE BYPASS VERCEL)
   const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>, folderId: string) => {
     const selectedFiles = e.target.files;
     if (!selectedFiles || selectedFiles.length === 0) return;
 
     const total = selectedFiles.length;
-    alert(`Memulai upload ${total} file... Mohon tunggu ya sayang 🥰`);
+    alert(`Memulai upload ${total} file peta... Mohon tunggu ya sayang 🥰`);
+    setIsUploading(true); // Nyalakan loading
 
-    // Proses upload satu per satu agar server tidak overload
-    for (let i = 0; i < selectedFiles.length; i++) {
-      const file = selectedFiles[i];
-      const formData = new FormData();
-      formData.append('file', file);
-      formData.append('folderId', folderId);
+    try {
+      // a. Minta kunci sementara dari server Vercel (Hanya 1x untuk semua file)
+      const tokenRes = await fetch('/api/admin/get-token');
+      const tokenData = await tokenRes.json();
+      
+      if (!tokenData.accessToken) throw new Error("Gagal dapat token dari server");
 
-      try {
-        const res = await fetch('/api/admin/upload', {
+      // b. Proses upload satu per satu langsung ke Drive
+      for (let i = 0; i < selectedFiles.length; i++) {
+        const file = selectedFiles[i];
+        
+        // Siapkan metadata (nama file dan folder tujuan)
+        const metadata = { name: file.name, parents: [folderId] };
+        
+        // Bungkus file besar
+        const formData = new FormData();
+        formData.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }));
+        formData.append('file', file);
+
+        // KIRIM LANGSUNG KE GOOGLE DRIVE
+        const res = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name', {
           method: 'POST',
+          headers: {
+            Authorization: `Bearer ${tokenData.accessToken}`,
+          },
           body: formData,
         });
         
         if (!res.ok) throw new Error(`Gagal upload ${file.name}`);
         console.log(`Berhasil upload: ${file.name}`);
-      } catch (err) {
-        alert(`Waduh, file ${file.name} gagal diunggah.`);
       }
-    }
 
-    alert(`Yeay! ${total} file berhasil terupload ke Drive! 🚀✨`);
-    e.target.value = ''; // Reset input
+      alert(`Yeay! ${total} file berhasil mendarat dengan aman di Drive! 🚀✨`);
+    } catch (err) {
+      console.error(err);
+      alert(`Waduh, terjadi kesalahan saat mengunggah file. Pastikan koneksi stabil ya.`);
+    } finally {
+      setIsUploading(false); // Matikan loading
+      e.target.value = ''; // Reset input agar bisa pilih file yang sama lagi
+    }
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 p-6 md:p-10 text-gray-800 font-sans">
+    <div className="min-h-screen bg-slate-50 p-6 md:p-10 text-gray-800 font-sans relative">
+      
+      {/* OVERLAY LOADING SAAT UPLOAD (Agar layar tidak bisa diklik sembarangan saat proses) */}
+      {isUploading && (
+        <div className="fixed inset-0 bg-white/70 backdrop-blur-sm z-50 flex flex-col items-center justify-center">
+          <div className="w-16 h-16 border-4 border-teal-200 border-t-teal-600 rounded-full animate-spin mb-4"></div>
+          <p className="text-teal-800 font-bold text-lg animate-pulse">Sedang mengirim peta ke satelit... 🛰️</p>
+        </div>
+      )}
+
       <div className="max-w-6xl mx-auto space-y-8">
         
         {/* HEADER DASHBOARD */}
@@ -167,6 +196,7 @@ export default function AdminDashboard() {
                         <input 
                           type="file" 
                           multiple 
+                          accept=".pdf,.zip,.rar,.jpg,.jpeg,.png"
                           className="hidden" 
                           onChange={(e) => handleUpload(e, f.id)} 
                         />
